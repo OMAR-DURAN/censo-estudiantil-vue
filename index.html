@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sistema de Estudiantes - Final</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 30px; background-color: #f8f9fa; }
+    h1 { color: #333; }
+    .inputs-container { 
+      background: white; padding: 20px; border-radius: 8px; 
+      box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px;
+      display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+    }
+    input { padding: 10px; border: 1px solid #ddd; border-radius: 5px; flex: 1; min-width: 150px; }
+    button { 
+      padding: 10px 20px; cursor: pointer; border-radius: 5px; border: none; 
+      font-weight: bold; transition: 0.3s;
+    }
+    #btn-guardar { background-color: #007bff; color: white; }
+    #btn-guardar:hover { background-color: #0056b3; }
+    .btn-refrescar { background-color: #28a745; color: white; margin-bottom: 20px; }
+    .btn-refrescar:hover { background-color: #218838; }
+    
+    table { width: 100%; border-collapse: collapse; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #eee; }
+    th { background-color: #f1f1f1; color: #444; }
+    tr:hover { background-color: #f9f9f9; }
+    
+    .btn-edit { background-color: #ffc107; color: #212529; margin-right: 5px; }
+    .btn-delete { background-color: #dc3545; color: white; }
+    .btn-delete:hover { background-color: #c82333; }
+  </style>
+</head>
+
+<body>
+
+<h1>Sistema de Estudiantes</h1>
+
+<div class="inputs-container">
+  <input type="text" id="fname" placeholder="Nombre">
+  <input type="text" id="lname" placeholder="Apellido">
+  <input type="text" id="matricula" placeholder="Matrícula">
+  <input type="text" id="seccion" placeholder="Sección">
+  <button id="btn-guardar" onclick="guardarEstudiante()">Guardar Estudiante</button>
+</div>
+
+<button class="btn-refrescar" onclick="obtenerDatos()">Refrescar Tabla</button>
+
+<table>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Nombre</th>
+      <th>Apellido</th>
+      <th>Matrícula</th>
+      <th>Sección</th>
+      <th>Acciones</th>
+    </tr>
+  </thead>
+  <tbody id="tabla-body">
+    </tbody>
+</table>
+
+<script>
+// CONFIGURACIÓN
+const supabaseUrl = "https://fnzzrdbmbzffpmtegabi.supabase.co";
+const supabaseKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZuenpyZGJtYnpmZnBtdGVnYWJpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM1NzcyMjEsImV4cCI6MjA4OTE1MzIyMX0.1BA2D6tUO4quIt0IRR8h0ZfMIo3HxulZtArJEUfRsTM";
+const cliente = supabase.createClient(supabaseUrl, supabaseKey);
+
+let idEditar = null;
+
+// 1. CARGAR DATOS (FUNCIONA CON EL BOTÓN REFRESCAR)
+async function obtenerDatos() {
+  console.log("Consultando datos...");
+  const { data, error } = await cliente
+    .from('studens')
+    .select('*')
+    .order('id', { ascending: false }); // Los más nuevos arriba
+
+  if (error) {
+    alert("Error al obtener datos: " + error.message);
+    return;
+  }
+
+  const tabla = document.getElementById("tabla-body");
+  tabla.innerHTML = "";
+
+  data.forEach(e => {
+    // Usamos || '' para que si es NULL en la base de datos, no se vea feo
+    tabla.innerHTML += `
+      <tr>
+        <td>${e.id}</td>
+        <td>${e.fname || ''}</td>
+        <td>${e.lname || ''}</td>
+        <td>${e.matricula || ''}</td>
+        <td>${e.seccion || ''}</td>
+        <td>
+          <button class="btn-edit" onclick="prepararEdicion(${e.id}, '${e.fname || ''}', '${e.lname || ''}', '${e.matricula || ''}', '${e.seccion || ''}')">Editar</button>
+          <button class="btn-delete" onclick="eliminar(${e.id})">Eliminar</button>
+        </td>
+      </tr>
+    `;
+  });
+}
+
+// 2. GUARDAR / ACTUALIZAR
+async function guardarEstudiante() {
+  const fname = document.getElementById("fname").value;
+  const lname = document.getElementById("lname").value;
+  const matricula = document.getElementById("matricula").value;
+  const seccion = document.getElementById("seccion").value;
+
+  if (!fname) { alert("Por favor, escribe un nombre"); return; }
+
+  let resultado;
+
+  if (idEditar === null) {
+    // NUEVO RECOR
+    resultado = await cliente
+      .from('studens')
+      .insert([{ fname, lname, matricula, seccion }]);
+  } else {
+    // ACTUALIZAR EXISTENTE
+    resultado = await cliente
+      .from('studens')
+      .update({ fname, lname, matricula, seccion })
+      .eq('id', idEditar);
+    
+    idEditar = null;
+    document.getElementById("btn-guardar").innerText = "Guardar Estudiante";
+    document.getElementById("btn-guardar").style.backgroundColor = "#007bff";
+  }
+
+  if (resultado.error) {
+    alert("Error: " + resultado.error.message);
+  } else {
+    limpiarCampos();
+    obtenerDatos(); // Esto refresca la tabla automáticamente
+  }
+}
+
+// 3. ELIMINAR (FUNCIONA SI TIENES LA POLÍTICA DELETE EN SUPABASE)
+async function eliminar(id) {
+  if (!confirm("¿Estás seguro de eliminar este registro?")) return;
+
+  const { error } = await cliente
+    .from('studens')
+    .delete()
+    .eq('id', id);
+
+  if (error) {
+    alert("No se pudo eliminar. Revisa si activaste la política DELETE en Supabase: " + error.message);
+  } else {
+    obtenerDatos(); // Refresca la tabla tras borrar
+  }
+}
+
+// 4. PREPARAR EDICIÓN
+function prepararEdicion(id, fname, lname, matricula, seccion) {
+  document.getElementById("fname").value = fname;
+  document.getElementById("lname").value = lname;
+  document.getElementById("matricula").value = matricula;
+  document.getElementById("seccion").value = seccion;
+
+  idEditar = id;
+  document.getElementById("btn-guardar").innerText = "Actualizar Cambios";
+  document.getElementById("btn-guardar").style.backgroundColor = "#ffc107";
+}
+
+function limpiarCampos() {
+  document.getElementById("fname").value = "";
+  document.getElementById("lname").value = "";
+  document.getElementById("matricula").value = "";
+  document.getElementById("seccion").value = "";
+}
+
+// Carga inicial al abrir la página
+obtenerDatos();
+
+</script>
+</body>
+</html>
